@@ -1,0 +1,16 @@
+{
+  "name": "hengstart",
+  "version": "1.0.0",
+  "description": "start application for develop on heng",
+  "main": "index.js",
+  "dependencies": {
+    "path-to-regexp": "^3.0.0",
+    "webpack": "^4.30.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "HellsCoder",
+  "license": "ISC"
+}
