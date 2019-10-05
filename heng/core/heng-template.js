@@ -12,6 +12,7 @@ var Template = {
     element: null,
     folder: null,
     callback: null,
+    cache: [],
 
     init: function(element, folder, callback){
         this.element = element;
@@ -66,7 +67,17 @@ var Template = {
             updatable - обновляемый ли шаблон(такой как профиль например, или друзья)
         */
         function afterRender(updatable){
-            Http.request(Template.folder + '/' + template, function(data){
+            if(!Template.cache[template]){
+                Http.request(Template.folder + '/' + template, function(data){
+                    Template.cache[template] = data;
+                    dataRender(data);
+                });  
+            }else{
+                console.info(template + " was loaded by cache store");
+                dataRender(Template.cache[template]);
+            }
+            
+            function dataRender(data){
                 if(updatable && document.querySelector('.updatable')){
                     data = Template.getBlockByTemplate(data, '.updatable');
                     cover.element = '.updatable';
@@ -106,7 +117,7 @@ var Template = {
                     console.info(e);
                     throw "TemplateRenderError: Template has no loaded by not found app element";
                 }
-            });           
+            }
         }
     },
 
