@@ -3,11 +3,12 @@
     @vk: vk.com/bytecode
 */
 
-var Http = require('./heng-http');
-var Router = require('./heng-router');
-var dom = require('./heng-dom');
+const Http = require('./heng-http');
+const Router = require('./heng-router');
+const dom = require('./heng-dom');
+const Logger = require('./heng-logger').getLogger("HENG");
 
-var Template = {
+const Template = {
     
     element: null,
     folder: null,
@@ -19,6 +20,39 @@ var Template = {
         this.folder = window.location.origin + "/" + folder;
         this.callback = callback;
         return this;
+    },
+
+    /*
+        Функция отрисовки компонента
+        componentFile - файл компонента из папки components в папке шаблонов
+        componentName - имя компонента(его ID в файле компонентов)
+        toElement - куда рендерить компонент
+        callback? - обратный вызов после выполнения
+    */
+    renderComponent(componentFile, componentName, toElement, callback){
+        if(!document.querySelector(toElement)){
+            throw new "ComponentRenderError: dst render component not exist";
+        }
+        if(Template.cache[componentFile]){
+            document.querySelector(toElement).innerHTML = Template.getBlockByTemplate(Template.cache[componentFile], '#'+componentName);
+            Router.handlers.setHandlers();
+            dom.startHandle();
+            if(callback){
+                callback();
+            }
+            return;
+        }
+        Http.request(Template.folder + '/components/' + componentFile, function(data){
+            document.querySelector(toElement).innerHTML = Template.getBlockByTemplate(data, '#'+componentName);
+            Template.cache[componentFile] = data;
+            Router.handlers.setHandlers();
+            dom.startHandle();
+            if(callback){
+                callback();
+            }
+        }, function(){
+            throw new "ComponentRenderError: file component not exist";
+        });
     },
 
     /*
@@ -48,6 +82,7 @@ var Template = {
                 if(!document.querySelector(cover.element)){
                     var folder = template.split("/")[0];
                     Http.request(Template.folder + '/' + folder + '/full.html', function(data){
+                        data = Template.compile(data, variables);
                         for(let i in variables){
                             data = data.replace('{{'+i+'}}', variables[i]);
                         }
@@ -73,7 +108,6 @@ var Template = {
                     dataRender(data);
                 });  
             }else{
-                console.info(template + " was loaded by cache store");
                 dataRender(Template.cache[template]);
             }
             
@@ -148,6 +182,61 @@ var Template = {
         var buffer = utils.querySelector(block).innerHTML;
         utils.innerHTML = '';
         return buffer;
+    },
+
+    /*
+        Функция компиляции шаблона
+    */
+
+    compile: function(data, variables){
+
+       /*
+         Создаем невидимый рабочий элемент
+       */
+       let utils;
+       if(!document.getElementById("utils")){
+           utils = document.createElement("div");
+           utils.id = "utils";
+           utils.style.display = 'none';
+           utils.innerHTML = data;
+       }else{
+           utils = document.getElementById("utils");
+           utils.innerHTML = data;
+       }
+
+       let ifs = utils.getElementsByTagName("if");
+       for(let i = 0; i < ifs.length; i++){
+           let expression = ifs[i];
+           if(!expression.hasAttribute("heng-condition")){
+               Logger.log("Faield to handle IF expression. Attribute heng-data has required");
+               continue;
+           }
+           let attr = expression.getAttribute("heng-condition");
+           let inversion = false;
+           if(attr.startsWith("!")){
+               inversion = true;
+               attr = attr.substr(1, attr.length);
+           }
+           if(!variables[attr] && inversion === false){
+               expression.remove();
+               continue;
+           }
+           let condition = variables[attr];
+           if(inversion){
+               condition = !condition;
+           }
+           if(!condition){
+               expression.remove();
+               continue;
+           }
+           expression.parentElement.innerHTML.replace(expression.outerHTML, expression.innerHTML);
+       }
+
+       let buff = utils.innerHTML;
+
+       utils.innerHTML = '';
+
+       return buff;
     }
 };
 
