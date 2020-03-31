@@ -14,6 +14,10 @@ const Template = {
     folder: null,
     callback: null,
     cache: [],
+    rendered: {
+        template: null,
+        variables: null
+    },
 
     init: function(element, folder, callback){
         this.element = element;
@@ -29,12 +33,17 @@ const Template = {
         toElement - куда рендерить компонент
         callback? - обратный вызов после выполнения
     */
-    renderComponent(componentFile, componentName, toElement, callback){
+    renderComponent(componentFile, componentName, toElement, variables, callback){
         if(!document.querySelector(toElement)){
             throw new "ComponentRenderError: dst render component not exist";
         }
         if(Template.cache[componentFile]){
-            document.querySelector(toElement).innerHTML = Template.getBlockByTemplate(Template.cache[componentFile], '#'+componentName);
+            let content = Template.getBlockByTemplate(Template.cache[componentFile], '#'+componentName);
+            content = Template.compile(content, variables);
+            for(let i in variables){
+                content = content.replace('{{'+i+'}}', variables[i]);
+            }
+            document.querySelector(toElement).innerHTML = content;
             Router.handlers.setHandlers();
             dom.startHandle();
             if(callback){
@@ -43,7 +52,12 @@ const Template = {
             return;
         }
         Http.request(Template.folder + '/components/' + componentFile, function(data){
-            document.querySelector(toElement).innerHTML = Template.getBlockByTemplate(data, '#'+componentName);
+            let content = Template.getBlockByTemplate(data, '#'+componentName);
+            content = Template.compile(content, variables);
+            for(let i in variables){
+                content = content.replace('{{'+i+'}}', variables[i]);
+            }
+            document.querySelector(toElement).innerHTML = content;
             Template.cache[componentFile] = data;
             Router.handlers.setHandlers();
             dom.startHandle();
@@ -65,6 +79,20 @@ const Template = {
 
     render: function(template, variables, cover, back){
         var trigger = false;
+
+        /*
+            Защита от повторной перерисовки шаблона
+        */
+
+        if(Template.rendered.template === template && JSON.stringify(Template.rendered.variables) === JSON.stringify(variables)){
+            back();
+            return;
+        }
+
+        Template.rendered = {
+            template: template,
+            variables: variables
+        };
 
         beforeRender();
 
@@ -204,33 +232,78 @@ const Template = {
            utils.innerHTML = data;
        }
 
-       let ifs = utils.getElementsByTagName("if");
+       let ifs = utils.getElementsByTagName("heng-if");
        for(let i = 0; i < ifs.length; i++){
-           let expression = ifs[i];
-           if(!expression.hasAttribute("heng-condition")){
-               Logger.log("Faield to handle IF expression. Attribute heng-data has required");
-               continue;
-           }
-           let attr = expression.getAttribute("heng-condition");
-           let inversion = false;
-           if(attr.startsWith("!")){
-               inversion = true;
-               attr = attr.substr(1, attr.length);
-           }
-           if(!variables[attr] && inversion === false){
-               expression.remove();
-               continue;
-           }
-           let condition = variables[attr];
-           if(inversion){
-               condition = !condition;
-           }
-           if(!condition){
-               expression.remove();
-               continue;
-           }
-           expression.parentElement.innerHTML.replace(expression.outerHTML, expression.innerHTML);
+            let expression = ifs[i];
+
+            if(!variables){
+                expression.remove();
+                i--;
+                continue;
+            }
+
+            if(!expression.hasAttribute("condition")){
+                Logger.log("Faield to handle HENG-IF expression. Attribute heng-data has required");
+                continue;
+            }
+            let attr = expression.getAttribute("condition");
+            let inversion = false;
+            if(attr.startsWith("!")){
+                inversion = true;
+                attr = attr.substr(1, attr.length);
+            }
+            if(!variables[attr] && inversion === false){
+                expression.remove();
+                i--;
+                continue;
+            }
+            let condition = variables[attr];
+            if(inversion){
+                condition = !condition;
+            }
+            if(!condition){
+                expression.remove();
+                i--;
+                continue;
+            }
+            
+            expression.parentElement.innerHTML = expression.innerHTML;
        }
+
+
+       let fors = utils.getElementsByTagName("heng-for");
+       for(let i = 0; i < fors.length; i++){
+            let expression = fors[i];
+
+            if(!variables){
+                expression.remove();
+                continue;
+            }
+
+
+            if(!expression.hasAttribute("array")){
+                Logger.log("Failed to handle HENG-FOR expression. Attribute array has required");
+                continue;
+            }
+            let attr = expression.getAttribute("array");
+            if(!variables[attr]){
+                expression.remove();
+                continue;
+            }
+            let exp_code = expression.innerHTML;
+            expression.innerHTML = '';
+            for(let key in variables[attr]){
+                let obj = variables[attr][key];
+                let replaced;
+                for(let v in obj){
+                    replaced = replaced ? replaced.replace(attr + '.' + v, obj[v]) : exp_code .replace(attr + '.' + v, obj[v]);
+                }
+                expression.innerHTML += replaced;
+            }
+
+            expression.parentElement.innerHTML = expression.innerHTML;
+       }
+
 
        let buff = utils.innerHTML;
 
