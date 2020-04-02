@@ -154,9 +154,11 @@ var Router =  {
 
         setHandle: function(element){
             for(let i = 0; i < document.getElementsByTagName(element).length; i++){
-                var link = document.getElementsByTagName(element)[i];            
-                link.removeEventListener("click", this.listen, true);
-                link.addEventListener("click", this.listen, true);
+                var link = document.getElementsByTagName(element)[i]; 
+                if(link.hasAttribute("href") && link.getAttribute("href").startsWith("/")){
+                    link.removeEventListener("click", this.listen, true);
+                    link.addEventListener("click", this.listen, true);
+                }           
             }                            
         },
 
