@@ -26,6 +26,17 @@ const Template = {
         return this;
     },
 
+    replaceAll: function (target, search, replacement){
+        return target.split(search).join(replacement);
+    },
+
+    replaceAllVars: function(content, variables){
+        for(let i in variables){
+            content = Template.replaceAll(content, '{{'+i+'}}', variables[i]);
+        }
+        return content;
+    },
+
     /*
         Функция отрисовки компонента
         componentFile - файл компонента из папки components в папке шаблонов
@@ -39,9 +50,8 @@ const Template = {
         }
         if(Template.cache[componentFile]){
             let content = Template.getBlockByTemplate(Template.cache[componentFile], '#'+componentName);
-            content = Template.compile(content, variables);
-            for(let i in variables){
-                content = content.replace('{{'+i+'}}', variables[i]);
+            if(variables){
+                content = Template.compile(content, variables);
             }
             document.querySelector(toElement).innerHTML = content;
             Router.handlers.setHandlers();
@@ -53,9 +63,8 @@ const Template = {
         }
         Http.request(Template.folder + '/components/' + componentFile, function(data){
             let content = Template.getBlockByTemplate(data, '#'+componentName);
-            content = Template.compile(content, variables);
-            for(let i in variables){
-                content = content.replace('{{'+i+'}}', variables[i]);
+            if(variables){
+                content = Template.compile(content, variables);
             }
             document.querySelector(toElement).innerHTML = content;
             Template.cache[componentFile] = data;
@@ -86,6 +95,7 @@ const Template = {
 
         if(Template.rendered.template === template && JSON.stringify(Template.rendered.variables) === JSON.stringify(variables)){
             back();
+            this.callback();
             return;
         }
 
@@ -103,7 +113,7 @@ const Template = {
             if(this.element === null || this.folder === null){
                 throw "TemplateRenderError: Init template before rendering";
             }
-            if(cover.element){
+            if(cover && cover.element){
                 if(cover.updatable){
                     trigger = true;
                 }               
@@ -111,9 +121,6 @@ const Template = {
                     var folder = template.split("/")[0];
                     Http.request(Template.folder + '/' + folder + '/full.html', function(data){
                         data = Template.compile(data, variables);
-                        for(let i in variables){
-                            data = data.replace('{{'+i+'}}', variables[i]);
-                        }
                         document.querySelector(Template.element).innerHTML = data;    
                         afterRender(trigger);        
                     });
@@ -140,15 +147,13 @@ const Template = {
             }
             
             function dataRender(data){
+                data = Template.compile(data, variables);
                 if(updatable && document.querySelector('.updatable')){
                     data = Template.getBlockByTemplate(data, '.updatable');
                     cover.element = '.updatable';
                 }
-                for(let i in variables){
-                    data = data.replace('{{'+i+'}}', variables[i]);
-                }
                 try{
-                    if(cover.element){
+                    if(cover && cover.element){
                         document.querySelector(cover.element).innerHTML = data;
                         if(document.querySelector(cover.element).getElementsByTagName("script").length > 0){
                             var buff = document.querySelector(cover.element).getElementsByTagName("script")[0].innerHTML;
@@ -218,23 +223,67 @@ const Template = {
 
     compile: function(data, variables){
 
+
+        let array = [
+            'heng-if',
+            'heng-for'
+        ];
+
+
        /*
          Создаем невидимый рабочий элемент
        */
-       let utils;
-       if(!document.getElementById("utils")){
-           utils = document.createElement("div");
-           utils.id = "utils";
-           utils.style.display = 'none';
-           utils.innerHTML = data;
-       }else{
-           utils = document.getElementById("utils");
-           utils.innerHTML = data;
-       }
+        let utils;
+        if(!document.getElementById("utils")){
+            utils = document.createElement("div");
+            utils.id = "utils";
+            utils.style.display = 'none';
+            utils.innerHTML = data;
+        }else{
+            utils = document.getElementById("utils");
+            utils.innerHTML = data;
+        }
 
-       let ifs = utils.getElementsByTagName("heng-if");
-       for(let i = 0; i < ifs.length; i++){
+        let checkIncluded = (utils) => {
+            for(let i = 0; i < array.length; i++){
+                if(utils.getElementsByTagName(array[i])){
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        let checkIsParents = (element) => {
+            while(element.parentElement !== null){
+                if(array.includes(element.parentElement.tagName.toLocaleLowerCase())){
+                    return true;
+                }
+                element = element.parentElement;
+            }
+            return false;
+        };
+
+        let parse = (json) => {
+            try{
+                json = JSON.parse(decodeURI(json));
+                if(!(json instanceof Object)){
+                    return false;
+                }
+                return json;
+            }catch(e){
+                return false;
+            }
+        };
+
+        let included = false;
+
+        let ifs = utils.getElementsByTagName("heng-if");
+        for(let i = 0; i < ifs.length; i++){
             let expression = ifs[i];
+
+            if(checkIsParents(expression)){
+                continue;
+            }
 
             if(!variables){
                 expression.remove();
@@ -243,7 +292,7 @@ const Template = {
             }
 
             if(!expression.hasAttribute("condition")){
-                Logger.log("Faield to handle HENG-IF expression. Attribute heng-data has required");
+                Logger.log("Faield to handle HENG-IF expression. Attribute condition has required");
                 continue;
             }
             let attr = expression.getAttribute("condition");
@@ -253,9 +302,12 @@ const Template = {
                 attr = attr.substr(1, attr.length);
             }
             if(!variables[attr] && inversion === false){
-                expression.remove();
-                i--;
-                continue;
+                if(attr != true && attr != 1){
+                    expression.remove();
+                    i--;
+                    continue;
+                }
+                variables[attr] = true;
             }
             let condition = variables[attr];
             if(inversion){
@@ -266,29 +318,42 @@ const Template = {
                 i--;
                 continue;
             }
+
+            if(checkIncluded(expression)){
+                included = true;
+            }
             
-            expression.parentElement.innerHTML = expression.innerHTML;
-       }
+            expression.parentElement.innerHTML = expression.parentElement.innerHTML.replace(expression.outerHTML, expression.innerHTML);
+        }
 
 
-       let fors = utils.getElementsByTagName("heng-for");
-       for(let i = 0; i < fors.length; i++){
+        let fors = utils.getElementsByTagName("heng-for");
+        for(let i = 0; i < fors.length; i++){
             let expression = fors[i];
+
+            if(checkIsParents(expression)){
+                continue;
+            }
+
 
             if(!variables){
                 expression.remove();
                 continue;
             }
 
-
             if(!expression.hasAttribute("array")){
                 Logger.log("Failed to handle HENG-FOR expression. Attribute array has required");
                 continue;
             }
             let attr = expression.getAttribute("array");
+            let as = expression.hasAttribute("as") ? expression.getAttribute("as") : false;
             if(!variables[attr]){
-                expression.remove();
-                continue;
+                let parser = parse(attr);
+                if(!parser){
+                    expression.remove();
+                    continue;
+                }
+                variables[attr] = parser;
             }
             let exp_code = expression.innerHTML;
             expression.innerHTML = '';
@@ -296,20 +361,36 @@ const Template = {
                 let obj = variables[attr][key];
                 let replaced;
                 for(let v in obj){
-                    replaced = replaced ? replaced.replace(attr + '.' + v, obj[v]) : exp_code .replace(attr + '.' + v, obj[v]);
+                    if(typeof(obj[v]) !== "string"){
+                        obj[v] = encodeURI(JSON.stringify(obj[v]));
+                    }
+                    if(as){
+                        replaced = replaced ? Template.replaceAll(replaced, as + '.' + v, obj[v]) : Template.replaceAll(exp_code, as + '.' + v, obj[v]);
+                    }else{
+                        replaced = replaced ? Template.replaceAll(replaced, attr + '.' + v, obj[v]) : Template.replaceAll(exp_code, attr + '.' + v, obj[v]);
+                    }
                 }
                 expression.innerHTML += replaced;
             }
 
+            if(checkIncluded(expression)){
+                included = true;
+            }
+
             expression.parentElement.innerHTML = expression.innerHTML;
-       }
+        }
 
+        let buff = utils.innerHTML;
 
-       let buff = utils.innerHTML;
+        if(included){
+            buff = Template.compile(buff, variables);
+        }
 
-       utils.innerHTML = '';
+        utils.innerHTML = '';
 
-       return buff;
+        buff = Template.replaceAllVars(buff, variables);
+
+        return buff;
     }
 };
 
