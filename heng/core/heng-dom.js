@@ -16,10 +16,25 @@ const Dom = {
     },
 
     select: function(selector){
+        let str;
         if(typeof(selector) === "string"){
+            str = selector;
             selector = document.querySelector(selector);
         }
         return {
+            checked: function(){
+                if(!str){
+                    return -1;
+                }
+                selector = document.querySelectorAll(str);
+                for(let i = 0; i < selector.length; i++){
+                    let object = selector[i];
+                    if(object.checked){
+                        return object.value;
+                    }
+                }
+                return -1;
+            },
             /*
                 Получение или установка значения
             */
