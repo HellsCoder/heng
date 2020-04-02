@@ -14,7 +14,7 @@ var Http = {
       });
       req.addEventListener("error", function() {
         error();
-        throw "HangHttpError: Network not available"
+        throw "HengHttpError: Network not available"
       });
       req.send(null);        
     }
