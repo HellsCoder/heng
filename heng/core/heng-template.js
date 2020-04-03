@@ -32,6 +32,11 @@ const Template = {
 
     replaceAllVars: function(content, variables){
         for(let i in variables){
+            if(variables[i] instanceof Object){
+                for(let key in variables[i]){
+                    content = Template.replaceAll(content, '{{'+i+'.'+key+'}}', variables[i][key]);
+                }
+            }
             content = Template.replaceAll(content, '{{'+i+'}}', variables[i]);
         }
         return content;
@@ -223,6 +228,7 @@ const Template = {
 
     compile: function(data, variables){
 
+        data = Template.replaceAllVars(data, variables);
 
         let array = [
             'heng-if',
@@ -264,6 +270,17 @@ const Template = {
         };
 
         let parse = (json) => {
+
+            /*
+                XSS Fix
+                В цикле объект загоняется в JSON, по этому вовращемое значение от сервера экранируется в обратную сторону. Тут мы его экранируем опять по новой, к нормальному значению
+            */
+
+            let xss = document.createElement("div");
+            xss.innerText = json;
+            json = xss.innerHTML;
+            xss.remove();
+
             try{
                 json = JSON.parse(decodeURI(json));
                 if(!(json instanceof Object)){
