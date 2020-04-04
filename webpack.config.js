@@ -11,7 +11,7 @@ const TerserJSPlugin = require('terser-webpack-plugin');
 module.exports = {
   context: __dirname,
     //heng entry file
-  entry: "./heng/app.js",
+  entry: "./app/app.js",
   output: {
     path: __dirname + "/build",
     filename: "bundle.[hash].js"
@@ -44,7 +44,7 @@ module.exports = {
   plugins: [
     new HtmlWebpackPlugin({
         minify: { collapseWhitespace: true },
-        template: 'heng/index.html',  
+        template: 'app/index.html',  
         filename: './../index.html'
     }),
     new MiniCssExtractPlugin({
