@@ -31,14 +31,33 @@ const Template = {
     },
 
     replaceAllVars: function(content, variables){
-        for(let i in variables){
-            if(variables[i] instanceof Object){
-                for(let key in variables[i]){
-                    content = Template.replaceAll(content, '{{'+i+'.'+key+'}}', variables[i][key]);
+
+        let getPaths = (tr) => {
+            let paths = [];
+          
+            function findPath(branch, str) {
+              Object.keys(branch).forEach(function (key) {
+                if (branch[key] instanceof Array || branch[key] instanceof Object){
+                    findPath(branch[key], str ? str + "." + key : key);
+                }else{
+                    paths.push({
+                        path: '{{' + (str ? str + "." + key : key) + '}}',
+                        value: branch[key]
+                    });
                 }
+              });    
             }
-            content = Template.replaceAll(content, '{{'+i+'}}', variables[i]);
+          
+            findPath(tr, "");
+            return paths;
         }
+
+        let allPaths = getPaths(variables);
+        for(let key in allPaths){
+            let path = allPaths[key];
+            content = Template.replaceAll(content, path.path, path.value);
+        }
+
         return content;
     },
 
@@ -319,7 +338,7 @@ const Template = {
                 attr = attr.substr(1, attr.length);
             }
             if(!variables[attr] && inversion === false){
-                if(attr != true && attr != 1){
+                if(attr != true && attr != "true" && attr != 1){
                     expression.remove();
                     i--;
                     continue;
